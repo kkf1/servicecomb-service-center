@@ -185,18 +185,25 @@ func (m *manager) ListTasks(ctx context.Context) ([]*carisync.Task, error) {
 
 	noHandleTasks := make([]*carisync.Task, 0, len(tasks))
 	skipTaskIDs := make([]string, 0, len(tasks))
+	allTaskIDs := make(map[string]bool)
 	for _, t := range tasks {
 		log.Info(fmt.Sprintf("list task id: %v", t.ID))
+		allTaskIDs[t.ID] = true
 		_, ok := m.cache.Load(t.ID)
 		if ok {
 			skipTaskIDs = append(skipTaskIDs, t.ID)
 			continue
 		}
 		m.cache.Store(t.ID, t)
-
 		noHandleTasks = append(noHandleTasks, t)
 		log.Info(fmt.Sprintf("no handle task id: %v", t.ID))
 	}
+	m.cache.Range(func(key, value any) bool {
+		if _, ok := allTaskIDs[key.(string)]; !ok {
+			m.cache.Delete(key)
+		}
+		return true
+	})
 
 	log.Info(fmt.Sprintf("load task raw count %d, to handle count %d, skip ids %v",
 		len(tasks), len(noHandleTasks), skipTaskIDs))
@@ -274,8 +281,6 @@ func (m *manager) handleResult(res *event.Result) {
 			log.Error("delete task failed", err)
 		}
 	}
-
-	m.cache.Delete(res.ID)
 }
 
 func (m *manager) handleTasks(sts syncTasks) {
